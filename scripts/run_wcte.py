@@ -200,7 +200,7 @@ MUON_PION_TOF_BOUNDARY_OVERRIDE_NS = None
 
 # --- 5. Real-data preparation and calibration --------------------------------
 
-RELATIVE_EFFICIENCY_MODE = "slot"  # "slot", "type", or "none"
+RELATIVE_EFFICIENCY_MODE = "none"  # "slot", "type", or "none"
 GEOMETRY_PLACEMENT = "est"         # surveyed "est" or nominal "design"
 CHARGE_ADC_PER_PE = 143.0
 
