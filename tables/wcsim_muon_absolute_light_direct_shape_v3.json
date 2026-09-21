@@ -1,5 +1,5 @@
 {
-  "calibration_id": "sha256:363fcffe30231587f59bf12db20fdec12eecc755a659ee693f67d0204ad0a5b6",
+  "calibration_id": "sha256:c32e4c55807e1e22a95b01ad23430ea47ab92052df027136a2b29ec634283803",
   "calibration_provenance_files_sha256": {
     "analysis/calibrate_muon_absolute_light.py": "6e09cc29315a9a038d17c77cbd9daec09eebb398e6bbd5d07a91fe8bef22fcc6",
     "analysis/wcsim_pe_yield_truth.py": "93ebe5bd7bd95861aea5aac7d6aa5cd71ead8ea0c097efb8de6357514db13138"
@@ -67,7 +67,7 @@
   "model_files_sha256": {
     "LicketyFit/Emitter.py": "309e225054d51f053215f9338ce27ea1a5e559e22bc33391af950de7603d748a",
     "LicketyFit/PMT.py": "60b04bfef2c6380c315be5d76cd59a01454694c258a527f730cacbdf7d14ef03",
-    "LicketyFit/absolute_light_calibration.py": "9d4a3406801e608d7e27f271c31c590c2ca670d4d70eb7b1328993a2719a1cc4",
+    "LicketyFit/absolute_light_calibration.py": "4d92349a2b705aec64a5f80199651ed38279ea2fb7603b4341b78959135ffd8a",
     "LicketyFit/wcsim_charge_response.py": "438b6da2dedc48a4caee3e7272a1d4c8390a6d8a36a67d8bc93fb708d0dde9bd",
     "scripts/batch_fit_driver.py": "9de59ffb7f21fe14e32b1ffc9b0bf6e654cd6bfed1cc3b78eb181fab396de2e3",
     "scripts/particle_range_lookup.py": "af2dae14d1de11fc08386f91cb8fa52995ab0a9b614d0a8da4329aa28fd88c83",

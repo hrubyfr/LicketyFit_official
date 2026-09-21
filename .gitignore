@@ -2,6 +2,8 @@
 ./work_dir/
 ./work_dir/
 
+.sys*
+./scripts/.sys*
 # Local generated working files
 /work_dir/
 

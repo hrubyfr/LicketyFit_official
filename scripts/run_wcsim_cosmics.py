@@ -116,7 +116,7 @@ COSMIC_MULTILATERATION_SEED_MODE = "hybrid"
 # profiled out. True retains absolute light and automatically selects the
 # calibrated threshold-censored compound-SPE likelihood. This is the only
 # switch a normal user needs to change between the two policies.
-USE_ABSOLUTE_LIGHT_YIELD = True
+USE_ABSOLUTE_LIGHT_YIELD = False
 
 # When absolute light is enabled, choose where its one detector-wide scale
 # comes from:
@@ -278,7 +278,7 @@ GEOMETRY_FILE = ""
 
 # Truth is diagnostic only and never enters the likelihood.
 USE_TRUTH_ROOT = True
-TRUTH_ROOT_FILE = ""  # Required only when USE_TRUTH_ROOT = True.
+TRUTH_ROOT_FILE = "/eos/experiment/wcte/wcte_tests/mPMT_led_events/LicketyFit_stuff/tutorial/wcsim_data/mu-/100mu-_1000MeV_x0y2924z-2500_cx0cy-0.707cz0.707.root"  # Required only when USE_TRUTH_ROOT = True.
 TRUTH_TREE = "AllSecondaries"
 TRUTH_EVENT_ID_OFFSET = 0
 

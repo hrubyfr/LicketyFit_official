@@ -290,8 +290,11 @@ def validate_pmt_charge_response_context(
             expected = response.get(field)
             active = authoritative[field]
             if isinstance(active, float):
+                # These moments are derived through BLAS reductions whose
+                # summation order can vary by CPU.  Accept last-bit drift
+                # while retaining exact checks for provenance and integers.
                 matches = isinstance(expected, (int, float)) and math.isclose(
-                    float(expected), active, rel_tol=0.0, abs_tol=1.0e-14
+                    float(expected), active, rel_tol=0.0, abs_tol=1.0e-12
                 )
             else:
                 matches = expected == active

@@ -18,7 +18,7 @@ from __future__ import annotations
 EVENT_SOURCE = "selection"
 
 # Collaboration run and optional exact merged-production ROOT override.
-RUN = 2079
+RUN = 1606
 COLLABORATION_ROOT_FILE = ""
 
 # Nominal analysis_tools populations: muon, pion, electron, proton. Kaon
@@ -49,8 +49,8 @@ INTERACTION_MODE = "full_length"  # "full_length" or "absorption"
 LIKELIHOOD_MODE = "charge_time"
 
 # Beam metadata and optional seed guidance; neither value is event truth.
-BEAM_MOMENTUM_MEV_C = 430.0
-EXPECTED_KINETIC_ENERGY_MEV = 300.0
+BEAM_MOMENTUM_MEV_C = 780.0
+EXPECTED_KINETIC_ENERGY_MEV = 681.46
 USE_EXPECTED_ENERGY_SEED_HINT = False
 
 # Required only for EVENT_SOURCE="file". USER_EVENT_KEY can disambiguate a
