@@ -18,7 +18,7 @@ from __future__ import annotations
 EVENT_SOURCE = "selection"
 
 # Collaboration run and optional exact merged-production ROOT override.
-RUN = 1606
+RUN = 1608
 COLLABORATION_ROOT_FILE = ""
 
 # Nominal analysis_tools populations: muon, pion, electron, proton. Kaon
@@ -60,7 +60,7 @@ USER_EVENT_KEY = ""
 
 # Selection mode scans at most N_ROOT_ENTRIES raw windows, then fits at most
 # MAX_EVENTS_TO_FIT selected events after skipping EVENT_START_INDEX of them.
-N_ROOT_ENTRIES = 5000
+N_ROOT_ENTRIES = 1222457
 MAX_EVENTS_TO_FIT = None
 EVENT_START_INDEX = 0
 
@@ -188,7 +188,7 @@ USE_ACT_TAGGER_CUT = True
 # separation is controlled independently by LIGHT_PARTICLE_PID_MODE above.
 TOF_CUT_MODE = "auto"  # "auto", "require", or "disable"
 PROTON_TOF_WINDOW_NS = 10.0
-REQUIRE_MUON_TAGGER = False
+REQUIRE_MUON_TAGGER = True
 
 # None uses run-derived selection constants.
 ACT_EVETO_CUT_OVERRIDE_PE = None

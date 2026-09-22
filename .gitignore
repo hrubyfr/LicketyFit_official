@@ -9,6 +9,8 @@
 
 /outputs/
 
+*.png
+
 # BEGIN LicketyFit generated artifacts
 # Python and Numba caches; retain the Python/C++ sources
 __pycache__/
