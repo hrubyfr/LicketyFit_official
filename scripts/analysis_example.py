@@ -100,23 +100,142 @@ def extract_results(df):
 
 def plot_vertex_residuals(true_pos_x, true_pos_y, results, bins=50):
     """
-    Plot histograms of (true - reconstructed) vertex position for x and y,
+    Plot histograms of (true - reconstructed) vertex position for x, y, and z,
     where results is the array returned by extract_results.
     """
     import matplotlib.pyplot as plt
 
     rec_x = results[:, 0]
     rec_y = results[:, 1]
+    rec_z = results[:, 2]
+    residual_x = true_pos_x - rec_x
+    residual_y = true_pos_y - rec_y
+    residual_z = -1348.76 - rec_z
+    from scipy.optimize import curve_fit
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    def gaussian(x, amplitude, mean, std):
+        return amplitude * np.exp(-0.5 * ((x - mean) / std) ** 2)
 
-    axes[0].hist(true_pos_x - rec_x, bins=bins)
+    def fit_histogram(values):
+        values_in_range = values[(values >= -250) & (values <= 250)]
+        counts, edges = np.histogram(values_in_range, bins=bins, range=(-250, 250))
+        centers = (edges[:-1] + edges[1:]) / 2
+        initial_std = max(np.std(values_in_range), np.finfo(float).eps)
+        initial_parameters = (np.max(counts), np.median(values_in_range), initial_std)
+        parameters, _ = curve_fit(
+            gaussian,
+            centers,
+            counts,
+            p0=initial_parameters,
+            bounds=([0, -250, np.finfo(float).eps], [np.inf, 250, np.inf]),
+            maxfev=10000,
+        )
+        return centers, counts, parameters
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    centers_x, counts_x, parameters_x = fit_histogram(residual_x)
+    axes[0].bar(
+        centers_x,
+        counts_x,
+        width=centers_x[1] - centers_x[0],
+        align="center",
+    )
+    x_fit = np.linspace(-250, 250, 500)
+    axes[0].plot(
+        x_fit, gaussian(x_fit, *parameters_x), color="red", label="Gaussian fit"
+    )
+    axes[0].set_xlim(-200, 200)
+    axes[0].set_yscale("log")
+    axes[0].set_ylim(bottom=1e-1)
     axes[0].set_xlabel("true x - reconstructed x [mm]")
     axes[0].set_ylabel("counts")
+    axes[0].text(
+        0.03,
+        0.97,
+        f"mean = {parameters_x[1]:.2f} mm\nstddev = {parameters_x[2]:.2f} mm",
+        transform=axes[0].transAxes,
+        va="top",
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+    )
 
-    axes[1].hist(true_pos_y - rec_y, bins=bins)
+    centers_y, counts_y, parameters_y = fit_histogram(residual_y)
+    axes[1].bar(
+        centers_y,
+        counts_y,
+        width=centers_y[1] - centers_y[0],
+        align="center",
+    )
+    axes[1].plot(
+        x_fit, gaussian(x_fit, *parameters_y), color="red", label="Gaussian fit"
+    )
+    axes[1].set_xlim(-200, 200)
+    axes[1].set_yscale("log")
+    axes[1].set_ylim(bottom=1e-1)
     axes[1].set_xlabel("true y - reconstructed y [mm]")
     axes[1].set_ylabel("counts")
+    axes[1].text(
+        0.03,
+        0.97,
+        f"mean = {parameters_y[1]:.2f} mm\nstddev = {parameters_y[2]:.2f} mm",
+        transform=axes[1].transAxes,
+        va="top",
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+    )
+
+    centers_z, counts_z, parameters_z = fit_histogram(residual_z)
+    axes[2].bar(
+        centers_z,
+        counts_z,
+        width=centers_z[1] - centers_z[0],
+        align="center",
+    )
+    axes[2].plot(
+        x_fit, gaussian(x_fit, *parameters_z), color="red", label="Gaussian fit"
+    )
+    axes[2].set_xlim(-200, 200)
+    axes[2].set_yscale("log")
+    axes[2].set_ylim(bottom=1e-1)
+    axes[2].set_xlabel("true z - reconstructed z [mm]")
+    axes[2].set_ylabel("counts")
+    axes[2].text(
+        0.03,
+        0.97,
+        f"mean = {parameters_z[1]:.2f} mm\nstddev = {parameters_z[2]:.2f} mm",
+        transform=axes[2].transAxes,
+        va="top",
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+    )
+
+    fig.tight_layout()
+    return fig, axes
+
+
+def plot_directions(results, bins=50):
+    """
+    Plot histograms of the reconstructed direction cosines (cx, cy, cz),
+    where results is the array returned by extract_results.
+    """
+    cx = results[:, 3]
+    cy = results[:, 4]
+    cz = results[:, 5]
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    axes[0].hist(cx, bins=bins)
+    axes[0].set_yscale("log")
+    axes[0].set_xlabel("cx")
+    axes[0].set_ylabel("counts")
+
+    axes[1].hist(cy, bins=bins)
+    axes[1].set_yscale("log")
+    axes[1].set_xlabel("cy")
+    axes[1].set_ylabel("counts")
+
+    axes[2].hist(cz, bins=bins)
+    axes[2].set_yscale("log")
+    axes[2].set_xlabel("cz")
+    axes[2].set_ylabel("counts")
 
     fig.tight_layout()
     return fig, axes
@@ -158,6 +277,9 @@ def main():
     results = extract_results(df)
     fig, axes = plot_vertex_residuals(true_pos_x, true_pos_y, results)
     fig.savefig(f"vertex_residuals_run{args.run_number}.png")
+
+    fig, axes = plot_directions(results)
+    fig.savefig(f"directions_run{args.run_number}.png")
 
 
 if __name__ == "__main__":
