@@ -15,7 +15,10 @@ TREE_NAME = "WCTEReadoutWindows"
 T5_X_BRANCH = "T5_hit_pos_x"
 T5_Y_BRANCH = "T5_hit_pos_y"
 
-
+ROOT_FILENAME = "/eos/user/f/fhruby/MC/wcsim.root"
+NPZ_FILENAME = "/eos/user/f/fhruby/MC/wcsim.npz"
+OUTPUT_FILENAME = "/eos/user/f/fhruby/LicketyFit_official/outputs/estimates_run1608_780p_muon_general_charge_time_relEff-none.dict"
+WCSIM_TREE_NAME = "wcsimT"
 
 def load_output_dict(run_number, outputs_dir="outputs"):
     """
@@ -42,6 +45,7 @@ def load_output_dict(run_number, outputs_dir="outputs"):
         data = pickle.load(f)
 
     return data, filepath
+
 
 
 def dump_dict_to_console(data, filepath=None):
@@ -71,10 +75,120 @@ def open_file(run_number, outputs_dir="outputs"):
     df.attrs["root_file"] = data["metadata"]["config_root_file"]
     return df
 
+def print_number_of_events(df):
+    """
+    Print the number of events in the DataFrame.
+    """
+    print(f"Number of events: {len(df)}")
 
 def collect_event_indices(df):
     """Extract df['event_number'] as a numpy array."""
     return df["event_number"].to_numpy()
+
+
+def extract_wcsim_vertices_and_compare(
+    root_filename=ROOT_FILENAME,
+    output_filename=OUTPUT_FILENAME,
+    tree_name=WCSIM_TREE_NAME,
+    vertex_scale_to_mm=1.0,
+    root_entry_indices=None,
+):
+    """Extract WCSim fVtxs and compare them with saved active-water truth.
+
+    ``vertex_scale_to_mm`` converts the fVtxs coordinates to mm. Supply 10.0
+    if the ROOT coordinates are in cm; the default assumes they are in mm.
+    ``root_entry_indices`` optionally maps each output row to a WCSim tree entry.
+    Without it, the two files must have the same number of event rows and are
+    assumed to be in the same order.
+    """
+    if not np.isfinite(vertex_scale_to_mm) or vertex_scale_to_mm <= 0.0:
+        raise ValueError("vertex_scale_to_mm must be a positive finite number")
+
+    with uproot.open(root_filename) as root_file:
+        tree = root_file[tree_name]
+        branch = tree["wcsimrootevent"]
+        print(f"Opened branch 'wcsimrootevent' with keys: {list(branch.keys())}")
+        vertex_branches = [
+            str(name).split(";")[0]
+            for name in branch.keys(recursive=True)
+            if str(name).split(";")[0].lower().endswith("fvtxs")
+        ]
+        if len(vertex_branches) != 1:
+            raise KeyError(
+                f"Expected one fVtxs branch in {tree_name!r}; "
+                f"found {vertex_branches}"
+            )
+        raw_vertices = ak.to_list(
+            tree[vertex_branches[0]].array(library="ak")
+        )
+
+    vertices_mm = np.full((len(raw_vertices), 3), np.nan, dtype=float)
+    for entry_index, value in enumerate(raw_vertices):
+        # fVtxs may be wrapped by the event-list and fixed-capacity dimensions.
+        while isinstance(value, list) and value and isinstance(value[0], list):
+            value = value[0]
+        if isinstance(value, list) and len(value) >= 3:
+            try:
+                vertices_mm[entry_index] = (
+                    np.asarray(value[:3], dtype=float) * vertex_scale_to_mm
+                )
+            except (TypeError, ValueError):
+                continue
+
+    with open(output_filename, "rb") as stream:
+        output = pickle.load(stream)
+
+    truth_keys = (
+        "truth_active_water_entry_x_mm",
+        "truth_active_water_entry_y_mm",
+        "truth_active_water_entry_z_mm",
+    )
+    if all(key in output for key in truth_keys):
+        truth_mm = np.column_stack([output[key] for key in truth_keys]).astype(float)
+    elif isinstance(output.get("wcsim_truth"), list):
+        truth_mm = np.asarray(
+            [
+                [row.get("x_mm", np.nan), row.get("y_mm", np.nan), row.get("z_mm", np.nan)]
+                for row in output["wcsim_truth"]
+            ],
+            dtype=float,
+        )
+    else:
+        raise KeyError(
+            "Output contains no active-water truth columns. Enable optional "
+            "WCSim truth when running the fit."
+        )
+
+    if root_entry_indices is None:
+        if len(vertices_mm) != len(truth_mm):
+            raise ValueError(
+                f"ROOT has {len(vertices_mm)} entries but output has "
+                f"{len(truth_mm)} truth rows; provide root_entry_indices "
+                "to align them."
+            )
+        root_entry_indices = np.arange(len(truth_mm), dtype=int)
+    else:
+        root_entry_indices = np.asarray(root_entry_indices, dtype=int)
+        if root_entry_indices.ndim != 1 or len(root_entry_indices) != len(truth_mm):
+            raise ValueError("root_entry_indices must have one index per output row")
+        if np.any(root_entry_indices < 0) or np.any(root_entry_indices >= len(vertices_mm)):
+            raise IndexError("root_entry_indices contains an invalid ROOT entry")
+
+    vertices_mm = vertices_mm[root_entry_indices]
+    result = pd.DataFrame({
+        "root_entry": root_entry_indices,
+        "wcsim_vertex_x_mm": vertices_mm[:, 0],
+        "wcsim_vertex_y_mm": vertices_mm[:, 1],
+        "wcsim_vertex_z_mm": vertices_mm[:, 2],
+        "truth_entry_x_mm": truth_mm[:, 0],
+        "truth_entry_y_mm": truth_mm[:, 1],
+        "truth_entry_z_mm": truth_mm[:, 2],
+    })
+    for axis in "xyz":
+        result[f"truth_minus_wcsim_{axis}_mm"] = (
+            result[f"truth_entry_{axis}_mm"] - result[f"wcsim_vertex_{axis}_mm"]
+        )
+    return result
 
 
 def extract_true_pos(root_file, event_indices, tree_name=TREE_NAME):
@@ -241,6 +355,45 @@ def plot_directions(results, bins=50):
     return fig, axes
 
 
+def plot_truth_vs_reco_2d(true_pos, reco_pos, label, bins=[60, 60], zoom_range=[[-200, 200], [-200, 200]]):
+    """Plot a 2D histogram of T5 truth (x axis) vs LicketyFit reco (y axis).
+
+    ``zoom_range`` follows ``hist2d``'s range format: ``[[xmin, xmax], [ymin, ymax]]``.
+    """
+    valid = np.isfinite(true_pos) & np.isfinite(reco_pos)
+    true_pos = true_pos[valid]
+    reco_pos = reco_pos[valid]
+
+    x_range, y_range = zoom_range
+
+    fig, axis = plt.subplots(figsize=(7, 6))
+    hist = axis.hist2d(
+        true_pos, reco_pos, bins=bins, range=[x_range, y_range], cmap="viridis"
+    )
+    fig.colorbar(hist[3], ax=axis, label="Events")
+
+    diag_min = max(x_range[0], y_range[0])
+    diag_max = min(x_range[1], y_range[1])
+    axis.plot([diag_min, diag_max], [diag_min, diag_max], color="crimson", linewidth=1, linestyle="--", label="y = x")
+    axis.legend()
+
+    correlation = np.corrcoef(true_pos, reco_pos)[0, 1]
+    axis.text(
+        0.03, 0.97, f"r = {correlation:.4f}",
+        transform=axis.transAxes, va="top",
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+    )
+
+    axis.set_xlim(x_range)
+    axis.set_ylim(y_range)
+    axis.set_xlabel(f"{label}_T5 [mm]")
+    axis.set_ylabel(f"{label}_LF [mm]")
+    axis.set_title(f"{label}: T5 truth vs LicketyFit reco (N={true_pos.size})")
+
+    fig.tight_layout()
+    return fig, axis
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Load and dump an output .dict file for a given run number."
@@ -267,6 +420,9 @@ def main():
     #dump_dict_to_console(data, filepath)
     
     df = open_file(args.run_number)
+
+    print_number_of_events(df)
+
     event_indices = collect_event_indices(df)
 
     EOS_ORIGINAL_FILE_PATH = df.attrs["root_file"]
@@ -280,6 +436,12 @@ def main():
 
     fig, axes = plot_directions(results)
     fig.savefig(f"directions_run{args.run_number}.png")
+
+    fig, axis = plot_truth_vs_reco_2d(true_pos_x, results[:, 0], "x")
+    fig.savefig(f"x_true_vs_reco_run{args.run_number}.png")
+
+    fig, axis = plot_truth_vs_reco_2d(true_pos_y, results[:, 1], "y", bins=[8, 32], zoom_range=[[-68.072, 68.075], [-200, 200]])
+    fig.savefig(f"y_true_vs_reco_run{args.run_number}.png")
 
 
 if __name__ == "__main__":

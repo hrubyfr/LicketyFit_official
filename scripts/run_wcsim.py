@@ -351,7 +351,7 @@ CHILD_STALL_TIMEOUT_SECONDS = 600
 EVENT_RESULT_STALL_TIMEOUT_SECONDS = 540
 
 SAVE_AFTER_EACH_BATCH = True
-SAVE_DETAILED_EVENT_RESULTS = False
+SAVE_DETAILED_EVENT_RESULTS = True
 
 # A failed per-event optimizer/physics certificate is saved as an explicit
 # rejected row (NaN fitted coordinates plus its exception and traceback) while

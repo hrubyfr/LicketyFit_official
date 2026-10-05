@@ -342,7 +342,7 @@ WARM_FIT_KERNELS = True
 EVENT_RESULT_STALL_TIMEOUT_SECONDS = 540
 
 SAVE_AFTER_EACH_BATCH = True
-SAVE_DETAILED_EVENT_RESULTS = False
+SAVE_DETAILED_EVENT_RESULTS = True
 
 # Save a failed event as an explicit rejected row and continue independent
 # events. Set False for stop-at-first-error debugging.

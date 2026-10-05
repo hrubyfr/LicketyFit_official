@@ -15,14 +15,14 @@ from __future__ import annotations
 # --- 1. Essential run settings ----------------------------------------------
 
 # Digitized WCSim NPZ input.
-INPUT_FILE = "/eos/experiment/wcte/wcte_tests/mPMT_led_events/LicketyFit_stuff/tutorial/wcsim_data/mu-/100mu-_1000MeV_x0y2924z-2500_cx0cy-0.707cz0.707.npz"  # Required: set this to your WCSim NPZ file.
+INPUT_FILE = "/eos/user/f/fhruby/MC/780_MeV_c_1000_mu-.npz"  # Required: set this to your WCSim NPZ file.
 
 # Supported fit hypotheses: "muon", "pion", "kaon", or "proton".
 FIT_PARTICLE = "muon"
 
 # Describes the simulated sample and seeds the beam-mode range. It does not
 # constrain a general-mode fit.
-ENERGY_LABEL_MEV = 1000.0
+ENERGY_LABEL_MEV = 680.0
 
 # Seed coverage and endpoint physics are independent choices.
 # "general" searches detector-wide; "beam" uses the compact beam-pipe bank.
@@ -35,7 +35,7 @@ INTERACTION_MODE = "full_length"  # "full_length" or "absorption"
 LIKELIHOOD_MODE = "charge_time"
 
 # Number of events to fit and the first input event index.
-N_EVENTS = 500
+N_EVENTS = 1000
 EVENT_START_INDEX = 0
 
 # Blank lets the driver construct its normal output filename.
@@ -278,7 +278,7 @@ GEOMETRY_FILE = ""
 
 # Truth is diagnostic only and never enters the likelihood.
 USE_TRUTH_ROOT = True
-TRUTH_ROOT_FILE = "/eos/experiment/wcte/wcte_tests/mPMT_led_events/LicketyFit_stuff/tutorial/wcsim_data/mu-/100mu-_1000MeV_x0y2924z-2500_cx0cy-0.707cz0.707.root"  # Required only when USE_TRUTH_ROOT = True.
+TRUTH_ROOT_FILE = "/eos/user/f/fhruby/MC/780_MeV_c_1000_mu-.root"  # Required only when USE_TRUTH_ROOT = True.
 TRUTH_TREE = "AllSecondaries"
 TRUTH_EVENT_ID_OFFSET = 0
 
@@ -309,7 +309,7 @@ PROMPT_TIME_MAX_NS = None
 # early window.  The subsequent 0..peak+5 ns hit window is unchanged.  This
 # prevents a later, unrelated pulse from replacing the primary track.  The hit
 # data alone do not identify the physical origin of that later pulse.
-PRIMARY_PROMPT_PEAK_SEARCH_MAX_NS = 100.0
+PRIMARY_PROMPT_PEAK_SEARCH_MAX_NS = 1000.0
 
 # Normally leave these mapping controls unchanged.
 PMT_ID_MODE = "auto"
@@ -351,7 +351,7 @@ CHILD_STALL_TIMEOUT_SECONDS = 600
 EVENT_RESULT_STALL_TIMEOUT_SECONDS = 540
 
 SAVE_AFTER_EACH_BATCH = True
-SAVE_DETAILED_EVENT_RESULTS = False
+SAVE_DETAILED_EVENT_RESULTS = True
 
 # A failed per-event optimizer/physics certificate is saved as an explicit
 # rejected row (NaN fitted coordinates plus its exception and traceback) while
