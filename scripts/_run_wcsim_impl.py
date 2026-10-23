@@ -496,10 +496,11 @@ def _validate(*, check_paths: bool) -> None:
         _require_geometry_submodule()
         if not str(INPUT_FILE).strip():
             raise ValueError("Set INPUT_FILE to the WCSim NPZ file you want to fit")
-        if USE_TRUTH_ROOT and not str(TRUTH_ROOT_FILE).strip():
-            raise ValueError("USE_TRUTH_ROOT=True requires TRUTH_ROOT_FILE")
+        use_throughgoing = bool(globals().get("USE_THROUGHGOING", False))
+        if (USE_TRUTH_ROOT or use_throughgoing) and not str(TRUTH_ROOT_FILE).strip():
+            raise ValueError("USE_TRUTH_ROOT/USE_THROUGHGOING=True requires TRUTH_ROOT_FILE")
         _require_file(INPUT_FILE, "INPUT_FILE")
-        if USE_TRUTH_ROOT:
+        if USE_TRUTH_ROOT or use_throughgoing:
             _require_file(TRUTH_ROOT_FILE, "TRUTH_ROOT_FILE")
         if str(GEOMETRY_FILE).strip():
             _require_file(GEOMETRY_FILE, "GEOMETRY_FILE")
@@ -666,7 +667,11 @@ def _configuration_items() -> list[tuple[str, object]]:
         ("GEOMETRY_PATH", None),
         ("LF_GEOMETRY_POLICY", "required_repository_submodule"),
         ("ENERGY_TRUE", ENERGY_LABEL_MEV),
-        ("WCSIM_USE_TRUTH_ROOT", USE_TRUTH_ROOT),
+        (
+            "WCSIM_USE_TRUTH_ROOT",
+            bool(USE_TRUTH_ROOT or globals().get("USE_THROUGHGOING", False)),
+        ),
+        ("WCSIM_USE_THROUGHGOING", bool(globals().get("USE_THROUGHGOING", False))),
         ("WCSIM_TRUTH_ROOT_FILE", TRUTH_ROOT_FILE),
         ("WCSIM_TRUTH_TREE", TRUTH_TREE),
         ("WCSIM_TRUTH_EVENT_ID_OFFSET", TRUTH_EVENT_ID_OFFSET),

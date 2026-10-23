@@ -15,7 +15,7 @@ from __future__ import annotations
 # --- 1. Essential run settings ----------------------------------------------
 
 # Digitized WCSim NPZ input.
-INPUT_FILE = "/eos/user/f/fhruby/MC/780_MeV_c_1000_mu-.npz"  # Required: set this to your WCSim NPZ file.
+INPUT_FILE = "/eos/user/f/fhruby/MC_Production/out/wcsim_wCDS_mu-_RealisticBeam_680MeV_0cm_Esigma10MeV_Bsigma2cm__PrimaryTruth_merged.npz"  # Required: set this to your WCSim NPZ file.
 
 # Supported fit hypotheses: "muon", "pion", "kaon", or "proton".
 FIT_PARTICLE = "muon"
@@ -278,7 +278,7 @@ GEOMETRY_FILE = ""
 
 # Truth is diagnostic only and never enters the likelihood.
 USE_TRUTH_ROOT = True
-TRUTH_ROOT_FILE = "/eos/user/f/fhruby/MC/780_MeV_c_1000_mu-.root"  # Required only when USE_TRUTH_ROOT = True.
+TRUTH_ROOT_FILE = "/eos/user/f/fhruby/MC_Production/out/wcsim_wCDS_mu-_RealisticBeam_680MeV_0cm_Esigma10MeV_Bsigma2cm__PrimaryTruth_merged.root"  # Required only when USE_TRUTH_ROOT = True.
 TRUTH_TREE = "AllSecondaries"
 TRUTH_EVENT_ID_OFFSET = 0
 

@@ -3300,40 +3300,151 @@ def _fit_event_with_failure_record(
         if not _env_bool("MCS_RECORD_EVENT_FAILURES", False):
             raise
         import traceback
-        return {
-            "event_index": int(event_index),
-            "fit_accepted": False,
-            "values": {
-                "x0": math.nan, "y0": math.nan, "z0": math.nan,
-                "cx": math.nan, "cy": math.nan, "cz": math.nan,
-                "length": math.nan, "visible_length": math.nan,
-                "full_range": math.nan, "t0": math.nan,
-            },
-            "raw_values": {
-                "x0": math.nan, "y0": math.nan, "z0": math.nan,
-                "cx": math.nan, "cy": math.nan, "cz": math.nan,
-                "length": math.nan, "visible_length": math.nan,
-                "full_range": math.nan, "t0": math.nan,
-            },
-            "longitudinal_gauge": {
-                "enabled": False,
-                "applied": False,
-                "reason": "removed_by_physical_longitudinal_reconstruction_policy",
-                "translation_mm": 0.0,
-            },
-            "errors": {},
-            "fval": math.inf,
-            "event_fit_wall_s": float(time.perf_counter() - event_wall0),
-            "total_nfcn": 0,
-            "mcs_process": None,
+        result = _placeholder_event_result(
+            event_index=event_index,
+            wall_s=time.perf_counter() - event_wall0,
+            prompt_time_min_ns=prompt_time_min_ns,
+            prompt_time_max_ns=prompt_time_max_ns,
+        )
+        result.update({
             "failure_stage": "event_fit_or_mcs_reference",
             "failure_type": type(exc).__name__,
             "failure_message": str(exc),
             "failure_traceback": traceback.format_exc(),
-            "prompt_time_min_ns": float(prompt_time_min_ns),
-            "prompt_time_max_ns": float(prompt_time_max_ns),
-            "worker_pid": int(os.getpid()),
-        }
+        })
+        return result
+
+
+def _placeholder_event_result(
+    *,
+    event_index: int,
+    wall_s: float,
+    prompt_time_min_ns: float,
+    prompt_time_max_ns: float,
+) -> dict[str, Any]:
+    """Create a rejected event row with NaN fit values and no uncertainties.
+
+    The row retains event, prompt-window, worker, and timing metadata so output
+    columns remain aligned when a fit fails or an event is intentionally skipped.
+    Failure details, when applicable, are added by the caller.
+    """
+    nan_values = {
+        "x0": math.nan, "y0": math.nan, "z0": math.nan,
+        "cx": math.nan, "cy": math.nan, "cz": math.nan,
+        "length": math.nan, "visible_length": math.nan,
+        "full_range": math.nan, "t0": math.nan,
+    }
+    return {
+        "event_index": int(event_index),
+        "fit_accepted": False,
+        "values": dict(nan_values),
+        "raw_values": dict(nan_values),
+        "longitudinal_gauge": {
+            "enabled": False,
+            "applied": False,
+            "reason": "removed_by_physical_longitudinal_reconstruction_policy",
+            "translation_mm": 0.0,
+        },
+        "errors": {},
+        "fval": math.inf,
+        "event_fit_wall_s": float(wall_s),
+        "total_nfcn": 0,
+        "mcs_process": None,
+        "prompt_time_min_ns": float(prompt_time_min_ns),
+        "prompt_time_max_ns": float(prompt_time_max_ns),
+        "worker_pid": int(os.getpid()),
+    }
+
+
+def _skipped_event_result(
+    *,
+    event_index: int,
+    reason: str,
+    prompt_time_min_ns: float,
+    prompt_time_max_ns: float,
+) -> dict[str, Any]:
+    """Mark an intentionally unfit event without recording a fit failure.
+
+    Starts from the standard rejected placeholder and adds a skip flag and
+    reason, preserving the same event-aligned output schema as fitted events.
+    """
+    result = _placeholder_event_result(
+        event_index=event_index,
+        wall_s=0.0,
+        prompt_time_min_ns=prompt_time_min_ns,
+        prompt_time_max_ns=prompt_time_max_ns,
+    )
+    result.update({"event_skipped": True, "event_skipped_reason": str(reason)})
+    return result
+
+
+def _vertex_direction_error_columns(
+    ordered: Sequence[Mapping[str, Any]],
+) -> dict[str, list[float]]:
+    """Build always-present, event-aligned vertex and direction error columns.
+
+    Vertex errors use fitted coordinates or the line-reference aliases used by
+    boundary-entry fits. Tangent-chart direction errors are mapped to Cartesian
+    component and angular errors using the local direction Jacobian. Since only
+    marginal parameter errors are available, propagation assumes zero u-v
+    covariance; unavailable values are reported as NaN.
+    """
+    from LicketyFit.track_parameterization import chart_from_metadata
+
+    columns: dict[str, list[float]] = {
+        name: []
+        for name in (
+            "x_error", "y_error", "z_error", "dir_u_error", "dir_v_error",
+            "cx_error", "cy_error", "cz_error", "direction_error_rad",
+        )
+    }
+
+    def lookup(errors: Mapping[str, Any], *names: str) -> float:
+        for name in names:
+            try:
+                value = float(errors[name])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                return value
+        return math.nan
+
+    for result in ordered:
+        errors = result.get("errors") or {}
+        for axis in "xyz":
+            # Boundary-entry fits report the error of the line reference point.
+            columns[f"{axis}_error"].append(
+                lookup(errors, f"{axis}0", f"line_reference_{axis}0")
+            )
+        sigma_u = lookup(errors, "dir_u")
+        sigma_v = lookup(errors, "dir_v")
+        columns["dir_u_error"].append(sigma_u)
+        columns["dir_v_error"].append(sigma_v)
+        cartesian = [math.nan] * 3
+        angular = math.nan
+        values = result.get("values") or {}
+        if (
+            math.isfinite(sigma_u) and math.isfinite(sigma_v)
+            and "direction_chart" in values
+        ):
+            try:
+                jacobian = chart_from_metadata(
+                    values["direction_chart"]
+                ).direction_jacobian(
+                    float(values.get("direction_chart_u", 0.0)),
+                    float(values.get("direction_chart_v", 0.0)),
+                )
+                # Uncorrelated u/v propagation; only marginal errors are stored.
+                variance = (jacobian[:, 0] * sigma_u) ** 2 + (jacobian[:, 1] * sigma_v) ** 2
+                cartesian = [float(math.sqrt(value)) for value in variance]
+                # The Jacobian columns lie in the tangent plane, so this is the local angular RMS.
+                angular = float(math.sqrt(float(np.sum(variance))))
+            except Exception:
+                pass
+        for name, value in zip(("cx_error", "cy_error", "cz_error"), cartesian):
+            columns[name].append(value)
+        columns["direction_error_rad"].append(angular)
+    return columns
 
 
 def _append_event_status_columns(
@@ -10820,6 +10931,8 @@ elif _UNIFIED_DATA_SOURCE == "wcsim" and _UNIFIED_FIT_MODE == "cosmic":
     SEED_GRID_METADATA = None
     SEED_DIRECTION_COUNT = 0
     COSMIC_SEED_RANGE_CLASSIFICATION = None
+    # Local event index -> reason, for events skipped by WCSIM_USE_THROUGHGOING.
+    THROUGHGOING_SKIP_REASONS = {}
     # Static placed-module kernels only.  No event observations or objective
     # predictions are retained here.  Forked workers inherit this geometry cache
     # copy-on-write and keep it bounded by the finite detector slot count.
@@ -22095,6 +22208,16 @@ elif _UNIFIED_DATA_SOURCE == "wcsim" and _UNIFIED_FIT_MODE == "cosmic":
 
         prompt_lo = float(OBS_PROMPT_MIN_ALL[index])
         prompt_hi = float(OBS_PROMPT_MAX_ALL[index])
+        if index in THROUGHGOING_SKIP_REASONS:
+            skipped = _skipped_event_result(
+                event_index=index,
+                reason=THROUGHGOING_SKIP_REASONS[index],
+                prompt_time_min_ns=prompt_lo,
+                prompt_time_max_ns=prompt_hi,
+            )
+            skipped["chosen_seed_fcn"] = _chosen_seed_fcn(skipped)
+            skipped.update(_mpmt_event_output_fields(None))
+            return skipped
         PMT_MODEL.first_arrival_prompt_min_ns = prompt_lo
         PMT_MODEL.first_arrival_prompt_max_ns = prompt_hi
 
@@ -23350,7 +23473,20 @@ elif _UNIFIED_DATA_SOURCE == "wcsim" and _UNIFIED_FIT_MODE == "cosmic":
                 for result in ordered
             ],
             "mcs_failure": [result.get("mcs_failure") for result in ordered],
+            "event_skipped": [
+                bool(result.get("event_skipped", False)) for result in ordered
+            ],
+            "event_skipped_reason": [
+                str(result.get("event_skipped_reason", "")) for result in ordered
+            ],
         }
+        output.update(_vertex_direction_error_columns(ordered))
+        output["metadata"].update({
+            "use_throughgoing": bool(_env_bool("WCSIM_USE_THROUGHGOING", False)),
+            "n_events_skipped_not_throughgoing": int(
+                sum(bool(result.get("event_skipped", False)) for result in ordered)
+            ),
+        })
         _append_event_status_columns(output, ordered)
         if SAVE_DETAILED_EVENT_RESULTS:
             output["results"] = ordered
@@ -23500,6 +23636,17 @@ elif _UNIFIED_DATA_SOURCE == "wcsim" and _UNIFIED_FIT_MODE == "cosmic":
             warm_fit_kernels(*prepared[0], allow_native_receiver=True)
             warm_wall_s = float(time.perf_counter() - warm0)
         setup_wall_s = float(time.perf_counter() - setup_wall0)
+
+        THROUGHGOING_SKIP_REASONS.clear()
+        if _env_bool("WCSIM_USE_THROUGHGOING", False):
+            # ROOT truth uses source IDs; workers receive dense local indices.
+            for local_index, source_id in enumerate(source_event_ids):
+                record = truth_records.get(int(source_id), {})
+                if not bool(record.get("exits_active_water", False)):
+                    THROUGHGOING_SKIP_REASONS[local_index] = (
+                        "not_throughgoing:"
+                        + str(record.get("exit_status", "truth_record_missing"))
+                    )
 
         if not COSMIC_CHILD_QUIET:
             if VERBOSE_SETUP:

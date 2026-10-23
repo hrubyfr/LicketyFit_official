@@ -92,6 +92,7 @@ _SIGNATURE_EXCLUDED = {
     "WCSIM_TRUTH_UPROOT_STEP_SIZE",
     "WCSIM_TRUTH_USE_EVENT_INDEX_CACHE",
     "WCSIM_USE_TRUTH_ROOT",
+    "WCSIM_USE_THROUGHGOING",
     "WCTE_EXPECTED_KE_MEV",
 }
 
@@ -296,6 +297,7 @@ def _bootstrap_environment(
     if str(source) == "wcsim":
         prepared["TOT_EVENTS"] = "1"
         prepared["WCSIM_USE_TRUTH_ROOT"] = "0"
+        prepared["WCSIM_USE_THROUGHGOING"] = "0"
         prepared.pop("WCSIM_TRUTH_ROOT_FILE", None)
     else:
         # In the WCTE driver this is a count *after* LF_EVENT_START_INDEX,

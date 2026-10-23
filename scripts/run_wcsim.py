@@ -15,14 +15,14 @@ from __future__ import annotations
 # --- 1. Essential run settings ----------------------------------------------
 
 # Digitized WCSim NPZ input.
-INPUT_FILE = "/eos/user/j/jrimmer/sim_work_dir/WCSim/sim_data/mu-/1kmu-_400MeV_bp.npz"  # Required: set this to your WCSim NPZ file.
+INPUT_FILE = "/eos/user/f/fhruby/MC_Production/out/wcsim_wCDS_mu-_RealisticBeam_680MeV_0cm_Esigma10MeV_Bsigma2cm__PrimaryTruth_merged.npz"  # Required: set this to your WCSim NPZ file.
 
 # Supported fit hypotheses: "muon", "pion", "kaon", or "proton".
 FIT_PARTICLE = "muon"
 
 # Describes the simulated sample and seeds the beam-mode range. It does not
 # constrain a general-mode fit.
-ENERGY_LABEL_MEV = 200.0
+ENERGY_LABEL_MEV = 680.0
 
 # Seed coverage and endpoint physics are independent choices.
 # "general" searches detector-wide; "beam" uses the compact beam-pipe bank.
@@ -35,7 +35,7 @@ INTERACTION_MODE = "full_length"  # "full_length" or "absorption"
 LIKELIHOOD_MODE = "charge_time"
 
 # Number of events to fit and the first input event index.
-N_EVENTS = 500
+N_EVENTS = 10000
 EVENT_START_INDEX = 0
 
 # Blank lets the driver construct its normal output filename.
@@ -116,7 +116,7 @@ COSMIC_MULTILATERATION_SEED_MODE = "hybrid"
 # profiled out. True retains absolute light and automatically selects the
 # calibrated threshold-censored compound-SPE likelihood. This is the only
 # switch a normal user needs to change between the two policies.
-USE_ABSOLUTE_LIGHT_YIELD = True
+USE_ABSOLUTE_LIGHT_YIELD = False
 
 # When absolute light is enabled, choose where its one detector-wide scale
 # comes from:
@@ -277,8 +277,10 @@ GEOMETRY_FILE = ""
 # --- 4. Optional per-step WCSim truth diagnostics ----------------------------
 
 # Truth is diagnostic only and never enters the likelihood.
-USE_TRUTH_ROOT = False
-TRUTH_ROOT_FILE = ""  # Required only when USE_TRUTH_ROOT = True.
+USE_TRUTH_ROOT = True
+TRUTH_ROOT_FILE = "/eos/home-f/fhruby/MC_Production/out/wcsim_wCDS_mu-_RealisticBeam_680MeV_0cm_Esigma10MeV_Bsigma2cm__PrimaryTruth_merged.root"  # Required when USE_TRUTH_ROOT or USE_THROUGHGOING is True.
+# Fit only events whose primary exits the active water; others get a skipped placeholder row.
+USE_THROUGHGOING = True
 TRUTH_TREE = "AllSecondaries"
 TRUTH_EVENT_ID_OFFSET = 0
 
@@ -309,7 +311,7 @@ PROMPT_TIME_MAX_NS = None
 # early window.  The subsequent 0..peak+5 ns hit window is unchanged.  This
 # prevents a later, unrelated pulse from replacing the primary track.  The hit
 # data alone do not identify the physical origin of that later pulse.
-PRIMARY_PROMPT_PEAK_SEARCH_MAX_NS = 100.0
+PRIMARY_PROMPT_PEAK_SEARCH_MAX_NS = 1000.0
 
 # Normally leave these mapping controls unchanged.
 PMT_ID_MODE = "auto"
@@ -351,7 +353,7 @@ CHILD_STALL_TIMEOUT_SECONDS = 600
 EVENT_RESULT_STALL_TIMEOUT_SECONDS = 540
 
 SAVE_AFTER_EACH_BATCH = True
-SAVE_DETAILED_EVENT_RESULTS = True
+SAVE_DETAILED_EVENT_RESULTS = False
 
 # A failed per-event optimizer/physics certificate is saved as an explicit
 # rejected row (NaN fitted coordinates plus its exception and traceback) while

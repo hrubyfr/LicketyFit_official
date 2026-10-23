@@ -108,15 +108,30 @@ _FLOAT_OUTPUT_FIELDS = {
     "truth_primary_start_z_mm": "primary_start_z_mm",
     "truth_primary_start_t_ns": "primary_start_t_ns",
     "truth_primary_start_ke_mev": "primary_start_ke_mev",
+    "truth_active_water_exit_x_mm": "exit_x_mm",
+    "truth_active_water_exit_y_mm": "exit_y_mm",
+    "truth_active_water_exit_z_mm": "exit_z_mm",
+    "truth_active_water_exit_t_ns": "exit_t_ns",
+    "truth_active_water_exit_ke_mev": "exit_ke_mev",
+    "truth_active_water_exit_dir_x": "exit_dir_x",
+    "truth_active_water_exit_dir_y": "exit_dir_y",
+    "truth_active_water_exit_dir_z": "exit_dir_z",
+    "truth_primary_end_x_mm": "end_x_mm",
+    "truth_primary_end_y_mm": "end_y_mm",
+    "truth_primary_end_z_mm": "end_z_mm",
+    "truth_primary_end_t_ns": "end_t_ns",
+    "truth_primary_end_ke_mev": "end_ke_mev",
 }
 _INT_OUTPUT_FIELDS = {
     "truth_active_water_entry_root_event_id": "root_event_id",
     "truth_active_water_entry_track_id": "track_id",
     "truth_active_water_entry_pdg": "pdg",
     "truth_active_water_entry_step": "step",
+    "truth_active_water_exit_step": "exit_step",
     "truth_primary_candidate_count": "primary_candidate_count",
 }
 _STRING_OUTPUT_FIELDS = {
+    "truth_active_water_exit_status": "exit_status",
     "truth_active_water_entry_status": "status",
     "truth_primary_selection_status": "primary_selection_status",
     "truth_active_water_entry_method": "entry_method",
@@ -465,6 +480,22 @@ def _empty_record(source_event_id: int, root_event_id: int, status: str) -> dict
         "primary_start_z_mm": math.nan,
         "primary_start_t_ns": math.nan,
         "primary_start_ke_mev": math.nan,
+        "exits_active_water": False,
+        "exit_status": "not_evaluated",
+        "exit_step": -1,
+        "exit_x_mm": math.nan,
+        "exit_y_mm": math.nan,
+        "exit_z_mm": math.nan,
+        "exit_t_ns": math.nan,
+        "exit_ke_mev": math.nan,
+        "exit_dir_x": math.nan,
+        "exit_dir_y": math.nan,
+        "exit_dir_z": math.nan,
+        "end_x_mm": math.nan,
+        "end_y_mm": math.nan,
+        "end_z_mm": math.nan,
+        "end_t_ns": math.nan,
+        "end_ke_mev": math.nan,
     }
 
 
@@ -601,6 +632,157 @@ def _entry_candidate(
         ),
     }
     return candidate
+
+
+def _exit_candidate(
+    chunk: Mapping[str, np.ndarray],
+    index: int,
+    detector,
+    *,
+    pre: np.ndarray,
+    post: np.ndarray,
+    global_index: int,
+) -> dict[str, Any]:
+    """Build an interpolated detector-exit record for one primary-track step.
+
+    The step endpoints are in detector millimetres. Bisection finds the last
+    inside point; time, kinetic energy, and direction are interpolated at the
+    same fraction. The returned mapping includes a stable ordering key for
+    comparing candidates across chunks.
+    """
+    delta = post - pre
+    length = float(np.linalg.norm(delta))
+    low, high = 0.0, 1.0
+    for _ in range(50):
+        if (high - low) * length <= 1.0e-7:
+            break
+        mid = 0.5 * (low + high)
+        if bool(detector.contains(pre + mid * delta, tolerance_mm=1.0e-7)):
+            low = mid
+        else:
+            high = mid
+    point = pre + low * delta
+
+    def interpolate(name_pre: str, name_post: str) -> float:
+        """Interpolate one scalar step branch, falling back to its finite end."""
+        a = _row_value(chunk, index, name_pre)
+        b = _row_value(chunk, index, name_post)
+        if math.isfinite(a) and math.isfinite(b):
+            return float(a + low * (b - a))
+        return float(a if math.isfinite(a) else b)
+
+    pre_direction = np.asarray(
+        [_row_value(chunk, index, f"dir_{axis}") for axis in "xyz"], dtype=np.float64
+    )
+    post_direction = np.asarray(
+        [_row_value(chunk, index, f"post_dir_{axis}") for axis in "xyz"],
+        dtype=np.float64,
+    )
+    if np.all(np.isfinite(pre_direction)) and np.all(np.isfinite(post_direction)):
+        direction = (1.0 - low) * pre_direction + low * post_direction
+    elif np.all(np.isfinite(post_direction)):
+        direction = post_direction
+    elif np.all(np.isfinite(pre_direction)):
+        direction = pre_direction
+    else:
+        direction = delta  # Step tangent when direction branches are not loaded.
+    dir_x, dir_y, dir_z = _normalise_direction(direction)
+
+    exit_t = interpolate("t_ns", "post_t_ns")
+    step_values = chunk.get("step")
+    step = _finite_int(step_values[index], -1) if step_values is not None else -1
+    return {
+        "step": int(step),
+        "x_mm": float(point[0]),
+        "y_mm": float(point[1]),
+        "z_mm": float(point[2]),
+        "t_ns": exit_t,
+        "ke_mev": interpolate("ke_MeV", "post_ke_MeV"),
+        "dir_x": dir_x,
+        "dir_y": dir_y,
+        "dir_z": dir_z,
+        "_order": (
+            exit_t if math.isfinite(exit_t) else -math.inf,
+            int(step),
+            int(global_index),
+        ),
+    }
+
+
+def _last_exit_candidate(
+    *,
+    chunk: Mapping[str, np.ndarray],
+    rows: np.ndarray,
+    positions: np.ndarray,
+    chronological: np.ndarray,
+    pre_points: np.ndarray,
+    post_points: np.ndarray,
+    pre_outer: np.ndarray,
+    detector,
+    chunk_entry_start: int,
+    block_size: int = 256,
+) -> dict[str, Any] | None:
+    """Find the chronologically last inside-to-outside crossing in a track.
+
+    Candidate steps are checked newest-first in bounded blocks. Outer-volume
+    membership cheaply rejects impossible steps before the full detector
+    predicate is evaluated. Returns the interpolated crossing, or ``None`` if
+    this chunk contains no qualifying exit.
+    """
+    reverse = chronological[::-1]
+    for start in range(0, reverse.size, block_size):
+        block = reverse[start : start + block_size]
+        block = block[pre_outer[positions[block]]]
+        if block.size == 0:
+            continue
+        block_positions = positions[block]
+        pre_inside = _contains_many(detector, pre_points[block_positions])
+        post_inside = _contains_many(detector, post_points[block_positions])
+        hits = np.flatnonzero(pre_inside & ~post_inside)
+        if hits.size:
+            local = int(block[hits[0]])
+            position = int(positions[local])
+            row_index = int(rows[local])
+            return _exit_candidate(
+                chunk,
+                row_index,
+                detector,
+                pre=pre_points[position],
+                post=post_points[position],
+                global_index=int(chunk_entry_start + row_index),
+            )
+    return None
+
+
+def _apply_exit_fields(record: dict[str, Any], state: Mapping[str, Any], *, entered: bool) -> None:
+    """Attach the selected primary's endpoint and throughgoing classification.
+
+    The final post-step point is always copied when available. An exit is
+    accepted only when the track entered active water, its final point lies
+    outside the outer detector, and a recorded active-volume crossing exists.
+    """
+    end = state.get("end")
+    if isinstance(end, Mapping):
+        record.update({f"end_{key}": _finite_float(value) for key, value in end.items()})
+    if not entered:
+        record["exit_status"] = "primary_never_enters_active_water"
+        return
+    if not isinstance(end, Mapping):
+        record["exit_status"] = "no_primary_steps"
+        return
+    # A temporary boundary crossing does not make a track throughgoing if it returns inside.
+    if bool(state.get("last_post_in_outer", False)):
+        record["exit_status"] = "stops_inside_detector"
+        return
+    exit_candidate = state.get("exit")
+    if not isinstance(exit_candidate, Mapping):
+        record["exit_status"] = "left_detector_without_active_water_exit"
+        return
+    record["exits_active_water"] = True
+    record["exit_status"] = "exits_active_water"
+    record["exit_step"] = int(exit_candidate["step"])
+    for name in ("x_mm", "y_mm", "z_mm", "t_ns", "ke_mev", "dir_x", "dir_y", "dir_z"):
+        record[f"exit_{name}"] = _finite_float(exit_candidate[name])
 
 
 def _track_rank(state: Mapping[str, Any]) -> tuple[float, float, float, int]:
@@ -756,11 +938,14 @@ def extract_active_water_entries_from_chunks(
     coordinate_offset_mm: Sequence[float] = (0.0, 0.0, 0.0),
     keep_private_entry_indices: bool = False,
 ) -> tuple[dict[int, dict[str, Any]], dict[str, Any]]:
-    """Extract first active-water entries from already materialized chunks.
+    """Extract primary entry, exit, and endpoint truth from branch chunks.
 
-    Each element may be a branch mapping or ``(global_entry_start, mapping)``.
-    The latter form lets the ROOT wrapper sparsely fetch optional details for the
-    selected crossing rows after the numeric pass.
+    Each element is a branch mapping or ``(global_entry_start, mapping)``.
+    Primary tracks are selected using particle identity and optional NPZ track
+    IDs. The output maps each requested source event to its first active-water
+    entry, last active-water exit, final post-step position, and classification;
+    the second return value summarizes scan and selection metrics. Global entry
+    indices allow the ROOT wrapper to fetch optional entry details afterward.
     """
     wall0 = time.perf_counter()
     source_ids = [int(value) for value in source_event_ids]
@@ -895,6 +1080,10 @@ def extract_active_water_entries_from_chunks(
                     "first_row_order": (math.inf, math.inf, math.inf),
                     "first_row": None,
                     "entry": None,
+                    "last_order": (-math.inf, -math.inf, -math.inf),
+                    "last_post_in_outer": False,
+                    "end": None,
+                    "exit": None,
                 }
                 tracks[key] = state
                 tracks_by_source[source_event_id].add(track_id)
@@ -915,7 +1104,8 @@ def extract_active_water_entries_from_chunks(
 
             group_steps = step_values[rows]
             order_t = np.where(np.isfinite(group_t), group_t, math.inf)
-            first_local = int(np.lexsort((rows, group_steps, order_t))[0])
+            chronological = np.lexsort((rows, group_steps, order_t))
+            first_local = int(chronological[0])
             first_row_index = int(rows[first_local])
             first_order = (
                 float(order_t[first_local]),
@@ -945,6 +1135,44 @@ def extract_active_water_entries_from_chunks(
                     "dir_y": start_direction[1],
                     "dir_z": start_direction[2],
                 }
+
+            # ROOT chunks can split a track, so its endpoint is chosen by step order.
+            last_local = int(chronological[-1])
+            last_position = int(positions[last_local])
+            last_row_index = int(rows[last_local])
+            last_order = (
+                float(order_t[last_local]),
+                int(group_steps[last_local]),
+                int(chunk_entry_start + last_row_index),
+            )
+            if last_order > tuple(state["last_order"]):
+                state["last_order"] = last_order
+                state["last_post_in_outer"] = bool(post_outer[last_position])
+                state["end"] = {
+                    "x_mm": float(post_points[last_position, 0]),
+                    "y_mm": float(post_points[last_position, 1]),
+                    "z_mm": float(post_points[last_position, 2]),
+                    "t_ns": _row_value(chunk, last_row_index, "post_t_ns"),
+                    "ke_mev": _row_value(chunk, last_row_index, "post_ke_MeV"),
+                }
+            if not bool(post_outer[last_position]):
+                exit_candidate = _last_exit_candidate(
+                    chunk=chunk,
+                    rows=rows,
+                    positions=positions,
+                    chronological=chronological,
+                    pre_points=pre_points,
+                    post_points=post_points,
+                    pre_outer=pre_outer,
+                    detector=detector,
+                    chunk_entry_start=chunk_entry_start,
+                )
+                previous_exit = state.get("exit")
+                if exit_candidate is not None and (
+                    previous_exit is None
+                    or tuple(exit_candidate["_order"]) > tuple(previous_exit["_order"])
+                ):
+                    state["exit"] = exit_candidate
 
             existing = state.get("entry")
             earliest_group_t = float(np.min(order_t)) if order_t.size else math.inf
@@ -1041,6 +1269,7 @@ def extract_active_water_entries_from_chunks(
             )
 
         entry = selected_state.get("entry")
+        _apply_exit_fields(record, selected_state, entered=isinstance(entry, Mapping))
         if not isinstance(entry, Mapping):
             record["status"] = "primary_never_enters_active_water"
             records[source_event_id] = record
@@ -2426,6 +2655,9 @@ def truth_output_columns(
     output: dict[str, list[Any]] = {
         "truth_active_water_entry_found": [bool(row.get("found", False)) for row in rows],
         "truth_active_water_entry_source_event_index": ids,
+        "truth_primary_exits_active_water": [
+            bool(row.get("exits_active_water", False)) for row in rows
+        ],
     }
     for output_name, record_name in _FLOAT_OUTPUT_FIELDS.items():
         output[output_name] = [_finite_float(row.get(record_name)) for row in rows]
